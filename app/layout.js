@@ -5,6 +5,7 @@ import "./pexpo-reference-v2.css";
 import "./pexpo-reference-v3.css";
 import "./pexpo-reference-v4.css";
 import "./pexpo-reference-v5.css";
+import "./pexpo-final.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
