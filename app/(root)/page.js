@@ -103,9 +103,7 @@ export default function Page() {
                 <p>Go beyond playlists. Discover sounds, artists and moments with a music experience designed around the next listen.</p>
                 <div className="pexpo-hero-actions">
                   <EventButton tab="explore" className="pexpo-primary-button"><Compass className="h-4 w-4" /> Discover</EventButton>
-                  <Link href={lastPlayed ? `/${lastPlayed.id}` : "#new-releases"} className="pexpo-secondary-button">
-                    <Play className="h-4 w-4" /> {lastPlayed ? "Resume listening" : "Start listening"}
-                  </Link>
+                  {lastPlayed ? <Link href={`/${lastPlayed.id}`} className="pexpo-secondary-button"><Play className="h-4 w-4" /> Resume listening</Link> : <EventButton tab="play" className="pexpo-secondary-button"><Play className="h-4 w-4" /> Start listening</EventButton>}
                 </div>
               </div>
               <div className="pexpo-hero-side">
@@ -115,7 +113,7 @@ export default function Page() {
               </div>
             </section>
 
-            <section id="new-releases" className="pexpo-section">
+            <section className="pexpo-section">
               <SectionTitle eyebrow="CURATED FOR YOU" title="New releases" subtitle="Fresh drops worth hearing first." />
               {loading ? <SongSkeletons /> : <div className="pexpo-song-grid">{latest.slice(0, 10).map((song, index) => <div key={song.id} className={index === 0 ? "pexpo-feature-card" : ""}><SongCard image={song.image?.[2]?.url} title={cleanMusicText(song.name)} artist={cleanMusicText(song.artists?.primary?.[0]?.name || "Unknown artist")} id={song.id} /></div>)}</div>}
             </section>
