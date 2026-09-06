@@ -3,81 +3,70 @@
 import Logo from "./logo";
 import Search from "./search";
 import SettingsPanel from "./settings-panel";
-import { ChevronLeft, Compass, Library, ListMusic, UserRound } from "lucide-react";
+import { ChevronLeft, use } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
-const tabs = [
-  { key: "play", label: "Play", icon: ListMusic },
-  { key: "library", label: "Library", icon: Library },
-  { key: "explore", label: "Explore", icon: Compass },
-  { key: "account", label: "Account", icon: UserRound },
-];
+const TABS = ["play", "explore", "library", "search"];
 
-function TabBar({ active, onSelect, compact = false }) {
-  const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.key === active));
-  return (
-    <div className={`pexpo-tabs ${compact ? "pexpo-tabs-compact" : ""}`} role="tablist" aria-label="PEXPO sections">
-      <span className="pexpo-tab-indicator" style={{ transform: `translateX(${activeIndex * 100}%)` }} aria-hidden="true" />
-      {tabs.map(({ key, label, icon: Icon }) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          aria-selected={active === key}
-          className={`pexpo-tab ${active === key ? "is-active" : ""}`}
-          onClick={() => onSelect(key)}
-        >
-          <Icon className="h-4 w-4" strokeWidth={1.8} />
-          <span>{label}</span>
-        </button>
-      ))}
-    </div>
-  );
+function setHash(tab, replace = false) {
+  const next = `#${tab}`;
+  if (replace) window.history.replaceState(null, "", next);
+  else window.history.pushState(null, "", next);
+  window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab } }));
+}
+
+export function getTabFromLocation() {
+  if (typeof window === "undefined") return "play";
+  const value = window.location.hash.replace(/^#/, "").toLowerCase();
+  return TABS.includes(value) ? value : "play";
 }
 
 export default function Header() {
   const path = usePathname();
   const router = useRouter();
-  const [active, setActive] = useState("play");
-  const isHome = path === "/";
+  const [active, setActive] = useState(getTabFromLocation);
 
   useEffect(() => {
-    const onTab = (event) => setActive(event.detail?.tab || "play");
-    window.addEventListener("pexpo-tab-change", onTab);
-    return () => window.removeEventListener("pexpo-tab-change", onTab);
+    if (!window.location.hash) window.history.replaceState(null, "", "#play");
+    const sync = () => {
+      const next = getTabFromLocation();
+      setActive(next);
+      window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab: next } }));
+    };
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    };
   }, []);
 
-  const selectTab = (key) => {
-    setActive(key);
-    window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab: key } }));
-    if (!isHome) router.push("/");
+  useEffect(() => {
+    if (path === "/search") setActive("search");
+  }, [path]);
+
+  const selectTab = (tab) => {
+    if (tab === "search") {
+      router.push("/search");
+      return;
+    }
+    if (path !== "/") router.push(`/#${tab}`);
+    else setHash(tab);
+    setActive(tab);
   };
 
   return (
     <header className="pexpo-header">
-      <nav className="pexpo-nav">
-        <div className="pexpo-brand-wrap"><Logo /></div>
-
-        <div className="hidden md:flex flex-1 justify-center min-w-0">
-          <TabBar active={active} onSelect={selectTab} />
-        </div>
-
-        <div className="pexpo-nav-actions">
-          <div className="hidden lg:block w-[250px] xl:w-[290px]"><Search /></div>
-          {!isHome && (
-            <button type="button" className="pexpo-icon-button" onClick={() => router.push("/")} aria-label="Back to PEXPO">
-              <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.9} />
-            </button>
-          )}
-          <SettingsPanel />
-        </div>
+      <nav className="pexpo-topbar">
+        <Logo />
+        <div className="pexpo-topbar-search"><Search /></div>
+        <SettingsPanel />
       </nav>
-
-      <div className="md:hidden pexpo-mobile-tools">
-        <div className="pexpo-mobile-search"><Search /></div>
-        <TabBar active={active} onSelect={selectTab} compact />
+      <div className="pexpo-desktop-tabs" aria-hidden="true">
+        {TABS.filter((t) => t !== "search").map((tab) => (
+          <button key={tab} className={active === tab ? "is-active" : ""} onClick={() => selectTab(tab)} type="button">{tab}</button>
+        ))}
       </div>
     </header>
   );
