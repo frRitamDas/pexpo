@@ -1,6 +1,7 @@
 import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import "./pexpo-reference.css";
+import "./pexpo-reference-v2.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
