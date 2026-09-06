@@ -3,7 +3,6 @@
 import Logo from "./logo";
 import Search from "./search";
 import SettingsPanel from "./settings-panel";
-import { ChevronLeft, use } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -63,7 +62,7 @@ export default function Header() {
         <div className="pexpo-topbar-search"><Search /></div>
         <SettingsPanel />
       </nav>
-      <div className="pexpo-desktop-tabs" aria-hidden="true">
+      <div className="pexpo-desktop-tabs">
         {TABS.filter((t) => t !== "search").map((tab) => (
           <button key={tab} className={active === tab ? "is-active" : ""} onClick={() => selectTab(tab)} type="button">{tab}</button>
         ))}
