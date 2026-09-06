@@ -1,296 +1,168 @@
 "use client";
+
 import { Button } from "@/components/ui/button";
 import { getSongsById } from "@/lib/fetch";
+import { cleanMusicText } from "@/lib/text";
 import { Download, Play, Repeat, Repeat1, Share2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  NextContext,
-  useMusicProvider,
-  useNextMusicProvider,
-} from "@/hooks/use-context";
+import { useMusicProvider, useNextMusicProvider } from "@/hooks/use-context";
 import Next from "@/components/cards/next";
 import { IoPause } from "react-icons/io5";
 
+const imageAt = (song) => song?.image?.[2]?.url || song?.image?.[1]?.url || song?.image?.[0]?.url || "";
+const audioAt = (song) => song?.downloadUrl?.[2]?.url || song?.downloadUrl?.[1]?.url || song?.downloadUrl?.[0]?.url || "";
+const formatTime = (time = 0) => `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(Math.floor(time % 60)).padStart(2, "0")}`;
+
 export default function Player({ id }) {
-  const [data, setData] = useState([]);
-  const [playing, setPlaying] = useState(true);
-  const audioRef = useRef(null);
+  const [data, setData] = useState(null);
+  const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
   const [audioURL, setAudioURL] = useState("");
-  const params = useSearchParams();
+  const audioRef = useRef(null);
   const next = useNextMusicProvider();
-  const { current, setCurrent, setDownloadProgress, downloadProgress } =
-    useMusicProvider();
+  const { current, setCurrent, setDownloadProgress, downloadProgress } = useMusicProvider();
 
-  const getSong = async () => {
-    const get = await getSongsById(id);
-    const data = await get.json();
-    setData(data.data[0]);
-    if (data?.data[0]?.downloadUrl[2]?.url) {
-      setAudioURL(data?.data[0]?.downloadUrl[2]?.url);
-    } else if (data?.data[0]?.downloadUrl[1]?.url) {
-      setAudioURL(data?.data[0]?.downloadUrl[1]?.url);
-    } else {
-      setAudioURL(data?.data[0]?.downloadUrl[0]?.url);
-    }
-  };
-
-  const formatTime = (time) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  };
-
-  const togglePlayPause = () => {
-    if (playing) {
-      audioRef.current.pause();
-      localStorage.setItem("p", "false");
-    } else {
-      audioRef.current.play();
-      localStorage.setItem("p", "true");
-    }
-    setPlaying(!playing);
-  };
-
-  const downloadSong = async () => {
-    if (isDownloading) {
-      setDownloadProgress(0);
-      setIsDownloading(false);
-      return;
-    }
-    setIsDownloading(true);
-    setDownloadProgress(0);
-
-    const response = await fetch(audioURL);
-    if (!response.ok) throw new Error("Failed to fetch");
-
-    const contentLength = response.headers.get("Content-Length");
-    if (!contentLength) {
-      console.warn("No Content-Length header, can't show progress accurately.");
-    }
-
-    const total = contentLength ? parseInt(contentLength, 10) : 0;
-    let loaded = 0;
-
-    const reader = response.body.getReader();
-    const chunks = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        loaded += value.length;
-
-        if (total) {
-          const progress = Math.round((loaded / total) * 100);
-          setDownloadProgress(progress);
-        }
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await getSongsById(id);
+        const json = await response.json();
+        const song = json?.data?.[0] || null;
+        if (cancelled) return;
+        setData(song);
+        setAudioURL(audioAt(song));
+        setCurrentTime(0);
+        setDuration(0);
+        setPlaying(false);
+        localStorage.setItem("last-played", id);
+        localStorage.removeItem("p");
+      } catch {
+        if (!cancelled) toast.error("Unable to load this song");
       }
-    }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
 
-    // Combine chunks into a blob
-    const blob = new Blob(chunks);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.name}.mp3`;
-    a.click();
-    URL.revokeObjectURL(url);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTime = () => {
+      setCurrentTime(audio.currentTime || 0);
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      setCurrent(audio.currentTime || 0);
+    };
+    const onLoaded = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      if (current && Number(current) > 0) audio.currentTime = Number(current);
+    };
+    const onEnded = () => {
+      if (!audio.loop && next?.nextData?.id) window.location.href = `/${next.nextData.id}`;
+    };
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("ended", onEnded);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, [current, next?.nextData?.id, setCurrent]);
 
-    toast.success("Downloaded!");
-    setIsDownloading(false);
-    setDownloadProgress(0);
+  const togglePlayPause = async () => {
+    const audio = audioRef.current;
+    if (!audio || !audioURL) return;
+    try {
+      if (audio.paused) { await audio.play(); localStorage.setItem("p", "true"); }
+      else { audio.pause(); localStorage.setItem("p", "false"); }
+    } catch { toast.error("Playback could not start"); }
   };
 
-  const handleSeek = (e) => {
-    const seekTime = e[0];
-    audioRef.current.currentTime = seekTime;
-    setCurrentTime(seekTime);
+  const handleSeek = ([value]) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = value;
+    setCurrentTime(value);
   };
 
   const loopSong = () => {
+    if (!audioRef.current) return;
     audioRef.current.loop = !audioRef.current.loop;
-    setIsLooping(!isLooping);
+    setIsLooping(audioRef.current.loop);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
+    if (!data?.id) return;
+    const url = `${window.location.origin}/${data.id}`;
     try {
-      navigator.share({
-        url: `https://${window.location.host}/${data.id}`,
-      });
-    } catch (e) {
-      toast.error("Something went wrong!");
+      if (navigator.share) await navigator.share({ title: cleanMusicText(data.name), url });
+      else { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    } catch (error) {
+      if (error?.name !== "AbortError") toast.error("Unable to share");
     }
   };
 
-  useEffect(() => {
-    getSong();
-    localStorage.setItem("last-played", id);
-    localStorage.removeItem("p");
-    if (current) {
-      audioRef.current.currentTime = parseFloat(current + 1);
-    }
-    const handleTimeUpdate = () => {
-      try {
-        setCurrentTime(audioRef.current.currentTime);
-        setDuration(audioRef.current.duration);
-        setCurrent(audioRef.current.currentTime);
-      } catch (e) {
-        setPlaying(false);
+  const downloadSong = async () => {
+    if (!audioURL || isDownloading) return;
+    try {
+      setIsDownloading(true); setDownloadProgress(0);
+      const response = await fetch(audioURL);
+      if (!response.ok || !response.body) throw new Error("Download failed");
+      const total = Number(response.headers.get("Content-Length") || 0);
+      let loaded = 0;
+      const reader = response.body.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) { chunks.push(value); loaded += value.length; if (total) setDownloadProgress(Math.round((loaded / total) * 100)); }
       }
-    };
-    audioRef.current.addEventListener("timeupdate", handleTimeUpdate);
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.removeEventListener("timeupdate", handleTimeUpdate);
-      }
-    };
-  }, []);
-  useEffect(() => {
-    const handleRedirect = () => {
-      if (currentTime === duration && !isLooping && duration !== 0) {
-        window.location.href = `https://${window.location.host}/${next?.nextData?.id}`;
-      }
-    };
-    if (isLooping || duration === 0) return;
-    return handleRedirect();
-  }, [currentTime, duration, isLooping, next?.nextData?.id]);
+      const blobUrl = URL.createObjectURL(new Blob(chunks));
+      const link = document.createElement("a");
+      link.href = blobUrl; link.download = `${cleanMusicText(data?.name || "pexpo-song")}.mp3`; link.click();
+      URL.revokeObjectURL(blobUrl);
+      toast.success("Download started");
+    } catch { toast.error("Download failed"); }
+    finally { setIsDownloading(false); setDownloadProgress(0); }
+  };
+
+  const title = cleanMusicText(data?.name || "");
+  const artist = cleanMusicText(data?.artists?.primary?.[0]?.name || "Unknown artist");
+  const artwork = imageAt(data);
+
   return (
-    <div className="mb-3 mt-10">
-      <audio
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onLoadedData={() => setDuration(audioRef.current.duration)}
-        autoPlay={playing}
-        src={audioURL}
-        ref={audioRef}
-      ></audio>
-      <div className="grid gap-6 w-full">
-        <div className="sm:flex px-6 md:px-20 lg:px-32 grid gap-5 w-full">
-          <div>
-            {data.length <= 0 ? (
-              <Skeleton className="md:w-[130px] aspect-square rounded-2xl md:h-[150px]" />
-            ) : (
-              <div className="relative">
-                <img
-                  src={data.image[2].url}
-                  className="sm:h-[150px] h-full aspect-square bg-secondary/50 rounded-2xl sm:w-[200px] w-full sm:mx-0 mx-auto object-cover"
-                />
-                <img
-                  src={data.image[2].url}
-                  className="hidden dark:block absolute top-0 left-0 w-[110%] h-[110%] blur-3xl -z-10 opacity-50"
-                />
-              </div>
-            )}
+    <section className="mx-auto w-full max-w-[1280px] px-4 pb-2 pt-9 sm:px-6 lg:px-10">
+      <audio ref={audioRef} src={audioURL || undefined} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
+      <div className="rounded-[30px] border border-border/70 bg-secondary/20 p-4 sm:p-6 lg:p-7">
+        <div className="grid gap-7 md:grid-cols-[240px_1fr] md:items-center">
+          <div className="mx-auto w-full max-w-[240px] md:mx-0">
+            {artwork ? <img src={artwork} alt={title || "Song artwork"} className="aspect-square w-full rounded-[22px] object-cover shadow-xl" /> : <Skeleton className="aspect-square w-full rounded-[22px]" />}
           </div>
-          {data.length <= 0 ? (
-            <div className="flex flex-col justify-between w-full">
-              <div>
-                <Skeleton className="h-4 w-36 mb-2" />
-                <Skeleton className="h-3 w-16 mb-4" />
-              </div>
-              <div>
-                <Skeleton className="h-4 w-full rounded-full mb-2" />
-                <div className="w-full flex items-center justify-between">
-                  <Skeleton className="h-[9px] w-6" />
-                  <Skeleton className="h-[9px] w-6" />
-                </div>
-                <div className="flex items-center gap-3 mt-3">
-                  <Skeleton className="h-10 w-10" />
-                  <Skeleton className="h-10 w-10" />
-                  <Skeleton className="h-10 w-10" />
+          <div className="min-w-0">
+            {data ? <><p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Now playing</p><h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl" title={title}>{title}</h1><Link href={`/search/${encodeURIComponent(artist)}`} className="mt-2 inline-block text-sm text-muted-foreground transition hover:text-foreground">{artist}</Link></> : <><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-9 w-3/4" /><Skeleton className="mt-2 h-4 w-32" /></>}
+            <div className="mt-8">
+              <Slider value={[currentTime]} max={Math.max(duration, 1)} step={0.1} onValueChange={handleSeek} disabled={!data} className="cursor-pointer" />
+              <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted-foreground"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <Button onClick={togglePlayPause} disabled={!data || !audioURL} className="h-10 rounded-full px-5 gap-2">{playing ? <IoPause className="h-4 w-4" /> : <Play className="h-4 w-4" />}{playing ? "Pause" : "Play"}</Button>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant={isLooping ? "secondary" : "ghost"} onClick={loopSong} aria-label="Repeat"><>{isLooping ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}</></Button>
+                  <Button size="icon" variant={isDownloading ? "secondary" : "ghost"} onClick={downloadSong} disabled={!data || isDownloading} aria-label="Download">{isDownloading ? <span className="text-[10px] font-semibold">{downloadProgress}%</span> : <Download className="h-4 w-4" />}</Button>
+                  <Button size="icon" variant="ghost" onClick={handleShare} disabled={!data} aria-label="Share"><Share2 className="h-4 w-4" /></Button>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col justify-between w-full">
-              <div className="sm:mt-0 mt-3">
-                <h1 className="text-xl font-bold md:max-w-lg">{data.name}</h1>
-                <p className="text-sm text-muted-foreground">
-                  by{" "}
-                  <Link
-                    href={
-                      "/search/" +
-                      `${encodeURI(data.artists.primary[0].name.toLowerCase().split(" ").join("+"))}`
-                    }
-                    className="text-foreground"
-                  >
-                    {data.artists.primary[0]?.name || "unknown"}
-                  </Link>
-                </p>
-              </div>
-              <div className="grid gap-2 w-full mt-5 sm:mt-0">
-                <Slider
-                  onValueChange={handleSeek}
-                  value={[currentTime]}
-                  max={duration}
-                  className="w-full"
-                />
-                <div className="w-full flex items-center justify-between">
-                  <span className="text-sm">{formatTime(currentTime)}</span>
-                  <span className="text-sm">{formatTime(duration)}</span>
-                </div>
-                <div className="flex items-center mt-1 justify-between w-full sm:mt-2">
-                  <Button
-                    variant={playing ? "default" : "secondary"}
-                    className="gap-1 rounded-full"
-                    onClick={togglePlayPause}
-                  >
-                    {playing ? (
-                      <IoPause className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                    {playing ? "Pause" : "Play"}
-                  </Button>
-                  <div className="flex items-center gap-2 sm:gap-3 sm:mt-0">
-                    <Button size="icon" variant="ghost" onClick={loopSong}>
-                      {!isLooping ? (
-                        <Repeat className="h-4 w-4" />
-                      ) : (
-                        <Repeat1 className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant={!isDownloading ? "ghost" : "secondary"}
-                      onClick={downloadSong}
-                    >
-                      {isDownloading ? (
-                        downloadProgress
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={handleShare}>
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
-      {next.nextData && (
-        <div className="mt-10 -mb-3 px-6 md:px-20 lg:px-32">
-          <Next
-            name={next.nextData.name}
-            artist={next.nextData.artist}
-            image={next.nextData.image}
-            id={next.nextData.id}
-          />
-        </div>
-      )}
-    </div>
+      {next?.nextData && <div className="mt-4"><Next name={cleanMusicText(next.nextData.name)} artist={cleanMusicText(next.nextData.artist)} image={next.nextData.image} id={next.nextData.id} /></div>}
+    </section>
   );
 }
