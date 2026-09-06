@@ -1,46 +1,44 @@
 "use client";
 
-import AlbumCard from "@/components/cards/album";
-import ArtistCard from "@/components/cards/artist";
-import SongCard from "@/components/cards/song";
-import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { ArrowRight, Compass, Library, Play, Search, UserRound } from "lucide-react";
+import { MusicContext } from "@/hooks/use-context";
 import { getSongsById, getSongsByQuery, searchAlbumByQuery } from "@/lib/fetch";
 import { cleanMusicText } from "@/lib/text";
-import {
-  ArrowUpRight,
-  Compass,
-  Headphones,
-  Library,
-  ListMusic,
-  Play,
-  Search,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
-import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const QUICK_SEARCHES = ["Arijit Singh", "Bollywood", "Romantic", "Lo-fi", "Punjabi", "Tamil", "Hindi classics", "Indie"];
-const TABS = ["play", "library", "explore", "account"];
-
-function SectionTitle({ eyebrow, title, subtitle }) {
-  return (
-    <div className="pexpo-section-title">
-      <div>
-        {eyebrow && <span className="pexpo-eyebrow">{eyebrow}</span>}
-        <h2>{title}</h2>
-        {subtitle && <p>{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
-
-function SongSkeletons({ count = 5 }) {
-  return <div className="pexpo-song-grid">{Array.from({ length: count }).map((_, i) => <div className="pexpo-skeleton-card" key={i}><Skeleton className="aspect-square w-full rounded-[20px]" /><Skeleton className="mt-3 h-4 w-4/5" /><Skeleton className="mt-2 h-3 w-2/5" /></div>)}</div>;
-}
+const TABS = ["play", "explore", "library", "account"];
+const MOODS = ["Chill", "Commute", "Energize", "Feel good"];
+const EXPLORE = ["Hip-hop", "Monsoon", "Workout", "Indian pop", "Commute", "Feel good"];
 
 function EventButton({ tab, children, className = "" }) {
-  return <button type="button" className={className} onClick={() => window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab } }))}>{children}</button>;
+  return <button type="button" className={className} onClick={() => {
+    if (typeof window === "undefined") return;
+    window.history.pushState(null, "", `#${tab}`);
+    window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab } }));
+  }}>{children}</button>;
+}
+
+function ArtCard({ song, feature = false }) {
+  const music = useContext(MusicContext);
+  const title = cleanMusicText(song?.name || "Unknown song");
+  const artist = cleanMusicText(song?.artists?.primary?.[0]?.name || "Unknown artist");
+  const image = song?.image?.[2]?.url || song?.image?.[1]?.url;
+  const play = () => {
+    if (!song?.id || !music?.setMusic) return;
+    music.setMusic(song.id);
+    localStorage.setItem("last-played", song.id);
+  };
+  return (
+    <article className={`pexpo-art-card ${feature ? "is-feature" : ""}`}>
+      <button type="button" onClick={play} className="pexpo-art-button" aria-label={`Play ${title}`}>
+        {image ? <img src={image} alt="" loading="lazy" /> : <Skeleton className="h-full w-full" />}
+        <span className="pexpo-art-shade" />
+        <span className="pexpo-art-copy"><strong>{title}</strong><small>{artist}</small></span>
+      </button>
+    </article>
+  );
 }
 
 export default function Page() {
@@ -50,123 +48,95 @@ export default function Page() {
   const [albums, setAlbums] = useState([]);
   const [lastPlayed, setLastPlayed] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [, startTransition] = useTransition();
 
   useEffect(() => {
-    const onTab = (event) => {
+    const sync = (event) => {
       const next = event.detail?.tab;
-      if (TABS.includes(next)) startTransition(() => setTab(next));
+      if (TABS.includes(next)) setTab(next);
     };
-    window.addEventListener("pexpo-tab-change", onTab);
-    return () => window.removeEventListener("pexpo-tab-change", onTab);
+    const syncHash = () => {
+      const value = window.location.hash.slice(1).toLowerCase();
+      if (TABS.includes(value)) setTab(value);
+    };
+    syncHash();
+    window.addEventListener("pexpo-tab-change", sync);
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    return () => {
+      window.removeEventListener("pexpo-tab-change", sync);
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([getSongsByQuery("latest"), getSongsByQuery("trending"), searchAlbumByQuery("latest")])
-      .then(async ([songs, trending, album]) => Promise.all([songs.json(), trending.json(), album.json()]))
-      .then(([songs, trending, album]) => {
+      .then(async ([a, b, c]) => Promise.all([a.json(), b.json(), c.json()]))
+      .then(([a, b, c]) => {
         if (cancelled) return;
-        setLatest(songs?.data?.results || []);
-        setPopular(trending?.data?.results || []);
-        setAlbums(album?.data?.results || []);
+        setLatest(a?.data?.results || []);
+        setPopular(b?.data?.results || []);
+        setAlbums(c?.data?.results || []);
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     const id = localStorage.getItem("last-played");
     if (!id) return;
-    getSongsById(id).then((res) => res.json()).then((json) => setLastPlayed(json?.data?.[0] || null)).catch(() => {});
+    getSongsById(id).then((r) => r.json()).then((j) => setLastPlayed(j?.data?.[0] || null)).catch(() => {});
   }, []);
 
-  const artists = useMemo(() => {
-    const map = new Map();
-    [...latest, ...popular].forEach((song) => {
-      const artist = song?.artists?.primary?.[0];
-      if (artist?.id && !map.has(artist.id)) map.set(artist.id, artist);
-    });
-    return [...map.values()].slice(0, 10);
-  }, [latest, popular]);
+  const recent = useMemo(() => {
+    const source = lastPlayed ? [lastPlayed, ...latest] : latest;
+    return source.filter((s, i, arr) => s?.id && arr.findIndex((x) => x?.id === s.id) === i).slice(0, 8);
+  }, [latest, lastPlayed]);
 
-  return (
-    <main className="pexpo-app-shell">
-      <div className="pexpo-page-frame" data-tab={tab}>
-        {tab === "play" && (
-          <div className="pexpo-view pexpo-view-enter">
-            <section className="pexpo-hero-grid">
-              <div className="pexpo-hero-main">
-                <div className="pexpo-hero-kicker"><span className="pexpo-live-dot" /> PEXPO / NOW DISCOVERING</div>
-                <h1>Music that feels<br /><span>made for you.</span></h1>
-                <p>Go beyond playlists. Discover sounds, artists and moments with a music experience designed around the next listen.</p>
-                <div className="pexpo-hero-actions">
-                  <EventButton tab="explore" className="pexpo-primary-button"><Compass className="h-4 w-4" /> Discover</EventButton>
-                  {lastPlayed ? <Link href={`/${lastPlayed.id}`} className="pexpo-secondary-button"><Play className="h-4 w-4" /> Resume listening</Link> : <EventButton tab="play" className="pexpo-secondary-button"><Play className="h-4 w-4" /> Start listening</EventButton>}
-                </div>
-              </div>
-              <div className="pexpo-hero-side">
-                <div className="pexpo-orbit-mark"><span>P</span></div>
-                <div><span className="pexpo-eyebrow">THE NEXT LISTEN</span><p>Fresh music. Familiar taste. Unexpected discoveries.</p></div>
-                <div className="pexpo-mini-stats"><span><strong>{latest.length || "—"}</strong> new</span><span><strong>{popular.length || "—"}</strong> trending</span></div>
-              </div>
-            </section>
-
-            <section className="pexpo-section">
-              <SectionTitle eyebrow="CURATED FOR YOU" title="New releases" subtitle="Fresh drops worth hearing first." />
-              {loading ? <SongSkeletons /> : <div className="pexpo-song-grid">{latest.slice(0, 10).map((song, index) => <div key={song.id} className={index === 0 ? "pexpo-feature-card" : ""}><SongCard image={song.image?.[2]?.url} title={cleanMusicText(song.name)} artist={cleanMusicText(song.artists?.primary?.[0]?.name || "Unknown artist")} id={song.id} /></div>)}</div>}
-            </section>
-
-            <section className="pexpo-discovery-band">
-              <div><span className="pexpo-eyebrow">DISCOVERY SIGNAL</span><h2>Let your next song surprise you.</h2><p>Explore by mood, culture, artist or sound.</p></div>
-              <EventButton tab="explore" className="pexpo-round-arrow" aria-label="Open Explore"><ArrowUpRight className="h-5 w-5" /></EventButton>
-            </section>
-
-            <section className="pexpo-section">
-              <SectionTitle eyebrow="ALBUMS" title="New worlds to enter" subtitle="Albums and soundtracks, presented without clutter." />
-              {loading ? <SongSkeletons /> : <div className="pexpo-album-grid">{albums.slice(0, 8).map((album) => <AlbumCard key={album.id} lang={album.language} image={album.image?.[2]?.url} album={album.album} title={cleanMusicText(album.name)} artist={cleanMusicText(album.artists?.primary?.[0]?.name || "Unknown artist")} id={`album/${album.id}`} />)}</div>}
-            </section>
-
-            <section className="pexpo-section">
-              <SectionTitle eyebrow="ARTISTS" title="Voices to follow" subtitle="People shaping what you hear next." />
-              {loading ? <div className="flex gap-5"><Skeleton className="h-24 w-24 rounded-full" /><Skeleton className="h-24 w-24 rounded-full" /><Skeleton className="h-24 w-24 rounded-full" /></div> : <div className="pexpo-artist-row">{artists.map((artist) => <ArtistCard key={artist.id} id={artist.id} image={artist.image?.[2]?.url} name={cleanMusicText(artist.name)} />)}</div>}
-            </section>
-
-            <section className="pexpo-section pexpo-trending-section">
-              <SectionTitle eyebrow="RIGHT NOW" title="Trending" subtitle="The sounds getting attention this week." />
-              {loading ? <SongSkeletons /> : <div className="pexpo-trending-grid">{popular.slice(0, 8).map((song, index) => <Link key={song.id} href={`/${song.id}`} className="pexpo-trending-item"><span className="pexpo-rank">{String(index + 1).padStart(2, "0")}</span><img src={song.image?.[2]?.url} alt="" /><div className="min-w-0"><strong>{cleanMusicText(song.name)}</strong><span>{cleanMusicText(song.artists?.primary?.[0]?.name || "Unknown artist")}</span></div><ArrowUpRight className="ml-auto h-4 w-4" /></Link>)}</div>}
-            </section>
-          </div>
-        )}
-
-        {tab === "library" && (
-          <div className="pexpo-view pexpo-view-enter">
-            <section className="pexpo-page-intro"><span className="pexpo-icon-tile"><Library className="h-5 w-5" /></span><div><span className="pexpo-eyebrow">YOUR MUSIC</span><h1>Library</h1><p>A private space for what you return to.</p></div></section>
-            <section className="pexpo-library-layout">
-              <div className="pexpo-library-feature">
-                {lastPlayed ? <><img src={lastPlayed.image?.[2]?.url} alt="" /><div><span className="pexpo-eyebrow">CONTINUE LISTENING</span><h2>{cleanMusicText(lastPlayed.name)}</h2><p>{cleanMusicText(lastPlayed.artists?.primary?.[0]?.name || "Unknown artist")}</p><Link href={`/${lastPlayed.id}`} className="pexpo-primary-button"><Play className="h-4 w-4" /> Play again</Link></div></> : <div className="pexpo-empty-state"><Headphones className="h-7 w-7" /><h2>Your library is waiting.</h2><p>Start a song and PEXPO will remember where your listening journey began.</p><EventButton tab="play" className="pexpo-secondary-button">Browse new music</EventButton></div>}
-              </div>
-              <div className="pexpo-library-list"><div className="pexpo-list-header"><span>Recently played</span><span>On this device</span></div>{lastPlayed && <Link href={`/${lastPlayed.id}`} className="pexpo-list-row"><img src={lastPlayed.image?.[2]?.url} alt="" /><span className="min-w-0"><strong>{cleanMusicText(lastPlayed.name)}</strong><small>{cleanMusicText(lastPlayed.artists?.primary?.[0]?.name || "Unknown artist")}</small></span><ArrowUpRight className="ml-auto h-4 w-4" /></Link>}</div>
-            </section>
-          </div>
-        )}
-
-        {tab === "explore" && (
-          <div className="pexpo-view pexpo-view-enter">
-            <section className="pexpo-page-intro"><span className="pexpo-icon-tile"><Compass className="h-5 w-5" /></span><div><span className="pexpo-eyebrow">DISCOVER SOMETHING NEW</span><h1>Explore</h1><p>Start with a feeling. Leave with a song.</p></div></section>
-            <section className="pexpo-explore-grid">{QUICK_SEARCHES.map((item, index) => <Link key={item} href={`/search/${encodeURIComponent(item)}`} className={`pexpo-explore-card ${index === 0 ? "is-featured" : ""}`}><Search className="h-4 w-4" /><span>{item}</span><ArrowUpRight className="ml-auto h-4 w-4" /></Link>)}</section>
-            <section className="pexpo-section"><SectionTitle eyebrow="TRENDING SIGNAL" title="People are listening" subtitle="A quick route into what's moving right now." /><div className="pexpo-trending-grid">{popular.slice(0, 10).map((song, index) => <Link key={song.id} href={`/${song.id}`} className="pexpo-trending-item"><span className="pexpo-rank">{String(index + 1).padStart(2, "0")}</span><img src={song.image?.[2]?.url} alt="" /><div className="min-w-0"><strong>{cleanMusicText(song.name)}</strong><span>{cleanMusicText(song.artists?.primary?.[0]?.name || "Unknown artist")}</span></div><ArrowUpRight className="ml-auto h-4 w-4" /></Link>)}</div></section>
-          </div>
-        )}
-
-        {tab === "account" && (
-          <div className="pexpo-view pexpo-view-enter">
-            <section className="pexpo-account-hero"><div className="pexpo-account-avatar"><UserRound className="h-7 w-7" /></div><div><span className="pexpo-eyebrow">PEXPO PROFILE</span><h1>Guest</h1><p>Your listening environment lives on this device.</p></div></section>
-            <section className="pexpo-account-grid"><div className="pexpo-account-card"><ListMusic className="h-5 w-5" /><span className="pexpo-eyebrow">PLAY</span><h2>Keep discovering.</h2><p>Return to the main feed whenever you're ready for the next listen.</p><EventButton tab="play" className="pexpo-secondary-button">Open Play</EventButton></div><div className="pexpo-account-card"><Library className="h-5 w-5" /><span className="pexpo-eyebrow">LIBRARY</span><h2>Your listening history.</h2><p>{lastPlayed ? "Your latest song is ready to continue." : "Play a song to start building your local history."}</p><EventButton tab="library" className="pexpo-secondary-button">Open Library</EventButton></div><div className="pexpo-account-card"><Sparkles className="h-5 w-5" /><span className="pexpo-eyebrow">PERSONALIZE</span><h2>Make PEXPO yours.</h2><p>Use the settings control in the navigation to adjust your experience.</p></div></section>
-          </div>
-        )}
-      </div>
-    </main>
+  if (tab === "play") return (
+    <main className="pexpo-app-shell"><div className="pexpo-page-frame">
+      <div className="pexpo-reference-title"><h1>Listen Now</h1></div>
+      <section className="pexpo-reference-section"><h2>Recents</h2>
+        {loading ? <div className="pexpo-reference-scroller">{[1,2,3].map(i => <Skeleton key={i} className="pexpo-art-skeleton" />)}</div> : <div className="pexpo-reference-scroller">{recent.map((song, i) => <ArtCard key={song.id} song={song} feature={i === 0} />)}</div>}
+      </section>
+      <section className="pexpo-reference-section"><h2>Quick picks</h2>
+        <div className="pexpo-quick-grid">{popular.slice(0, 6).map((song) => <ArtCard key={song.id} song={song} />)}</div>
+      </section>
+      <section className="pexpo-reference-section"><h2>Made for your mood</h2>
+        <div className="pexpo-mood-row">{MOODS.map((m, i) => <Link key={m} href={`/search/${encodeURIComponent(m)}`} className={`pexpo-mood-card mood-${i}`}>{m}<ArrowRight /></Link>)}</div>
+      </section>
+    </div></main>
   );
+
+  if (tab === "explore") return (
+    <main className="pexpo-app-shell"><div className="pexpo-page-frame">
+      <div className="pexpo-reference-title"><h1>Explore</h1></div>
+      <section className="pexpo-reference-section"><h2>For you</h2><div className="pexpo-explore-reference">{EXPLORE.map((name, i) => {
+        const song = popular[i] || latest[i];
+        return <Link key={name} href={`/search/${encodeURIComponent(name)}`} className={`pexpo-explore-tile tile-${i}`}>
+          <strong>{name}</strong>{song?.image?.[2]?.url && <img src={song.image[2].url} alt="" />}
+        </Link>;
+      })}</div></section>
+      <section className="pexpo-reference-section"><h2>Moods & moments</h2><div className="pexpo-explore-reference">{[...MOODS, "Focus", "Night drive"].map((name, i) => <Link key={`${name}-${i}`} href={`/search/${encodeURIComponent(name)}`} className={`pexpo-explore-tile tile-${i + 2}`}><strong>{name}</strong>{popular[i]?.image?.[2]?.url && <img src={popular[i].image[2].url} alt="" />}</Link>)}</div></section>
+    </div></main>
+  );
+
+  if (tab === "library") return (
+    <main className="pexpo-app-shell"><div className="pexpo-page-frame">
+      <div className="pexpo-reference-title"><h1>Library</h1></div>
+      <Link href="/replay" className="pexpo-replay-banner"><div><strong>Your Replay</strong><span>48 minutes listened · 21 plays · 2026</span></div><ArrowRight /></Link>
+      <section className="pexpo-reference-section"><h2>On Device</h2><div className="pexpo-device-grid"><Link href="#downloads" className="pexpo-device-card device-blue"><DownloadIcon /><strong>Downloads</strong><span>Downloaded songs</span></Link><Link href="#local" className="pexpo-device-card device-teal"><MusicIcon /><strong>Local Music</strong><span>Audio files on device</span></Link></div></section>
+      <section className="pexpo-reference-section"><h2>Playlists</h2><div className="pexpo-playlist-grid"><button className="pexpo-new-playlist">+</button>{albums.slice(0, 4).map((a) => <Link key={a.id} href={`/album/${a.id}`} className="pexpo-playlist-card"><img src={a.image?.[2]?.url} alt="" /><strong>{cleanMusicText(a.name)}</strong></Link>)}</div></section>
+    </div></main>
+  );
+
+  return <main className="pexpo-app-shell"><div className="pexpo-page-frame">
+    <div className="pexpo-reference-title"><h1>Account</h1></div>
+    <section className="pexpo-account-reference"><UserRound /><h2>Guest</h2><p>Your listening environment lives on this device.</p><EventButton tab="play" className="pexpo-reference-button"><Play /> Open Play</EventButton></section>
+  </div></main>;
 }
+
+function DownloadIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" /></svg>; }
+function MusicIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5V7.8L18 5v10.5M7 18.5a3 3 0 1 0 3 3 3 3 0 0 0-3-3Zm11-3a3 3 0 1 0 3 3 3 3 0 0 0-3-3Z" /></svg>; }
