@@ -1,0 +1,26 @@
+.pexpo-search-screen { min-height: calc(100vh - 120px); padding: 42px 22px 180px; max-width: 1100px; margin: 0 auto; }
+.pexpo-search-title { text-align: center; color: #fff; font-size: 34px; line-height: 1; font-weight: 650; letter-spacing: -.045em; margin-bottom: 48px; }
+.pexpo-search-box { height: 78px; border-radius: 22px; background: #1c1c1e; display: flex; align-items: center; gap: 17px; padding: 0 22px; }
+.pexpo-search-box svg { width: 31px; height: 31px; color: #8f8f96; flex: 0 0 auto; }
+.pexpo-search-box input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: #fff; font: inherit; font-size: 25px; }
+.pexpo-search-box input::placeholder { color: #8d8d93; }
+.pexpo-search-history { margin-top: 40px; }
+.pexpo-search-history-head { display: flex; align-items: center; justify-content: space-between; }
+.pexpo-search-history-head h1 { color: #fff; font-size: 31px; font-weight: 700; letter-spacing: -.045em; }
+.pexpo-search-history-head button { color: #fff; border: 0; background: transparent; font-size: 20px; font-weight: 600; }
+.pexpo-search-history-row { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.pexpo-search-history-row > button:first-child { display: flex; align-items: center; gap: 20px; min-width: 0; color: #fff; border: 0; background: transparent; font-size: 23px; font-weight: 600; text-align: left; }
+.pexpo-search-history-row > button:first-child svg { width: 30px; height: 30px; color: #929298; flex: 0 0 auto; }
+.pexpo-search-history-row > button:last-child { color: #8d8d93; border: 0; background: transparent; padding: 12px; }
+.pexpo-search-history-row > button:last-child svg { width: 27px; height: 27px; }
+.pexpo-search-empty { color: #8f8f96; font-size: 18px; padding-top: 30px; }
+@media (max-width: 560px) {
+  .pexpo-search-screen { padding: 20px 22px 170px; }
+  .pexpo-search-title { font-size: 34px; margin-bottom: 48px; }
+  .pexpo-search-box { height: 78px; border-radius: 20px; padding: 0 20px; }
+  .pexpo-search-box input { font-size: 20px; }
+  .pexpo-search-history-head h1 { font-size: 30px; }
+  .pexpo-search-history-head button { font-size: 20px; }
+  .pexpo-search-history-row { min-height: 88px; }
+  .pexpo-search-history-row > button:first-child { font-size: 21px; }
+}
