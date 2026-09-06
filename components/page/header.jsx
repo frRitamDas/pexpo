@@ -1,7 +1,6 @@
 "use client";
 
 import Logo from "./logo";
-import Search from "./search";
 import SettingsPanel from "./settings-panel";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -27,22 +26,17 @@ export default function Header() {
   const [active, setActive] = useState(getTabFromLocation);
 
   useEffect(() => {
-    if (!window.location.hash) window.history.replaceState(null, "", "#play");
-    const sync = () => {
-      const next = getTabFromLocation();
-      setActive(next);
-      window.dispatchEvent(new CustomEvent("pexpo-tab-change", { detail: { tab: next } }));
-    };
+    if (!window.location.hash && path === "/") window.history.replaceState(null, "", "#play");
+    const sync = () => setActive(path === "/search" ? "search" : getTabFromLocation());
+    sync();
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
+    window.addEventListener("pexpo-tab-change", sync);
     return () => {
       window.removeEventListener("hashchange", sync);
       window.removeEventListener("popstate", sync);
+      window.removeEventListener("pexpo-tab-change", sync);
     };
-  }, []);
-
-  useEffect(() => {
-    if (path === "/search") setActive("search");
   }, [path]);
 
   const selectTab = (tab) => {
@@ -57,16 +51,17 @@ export default function Header() {
 
   return (
     <header className="pexpo-header">
-      <nav className="pexpo-topbar">
+      <nav className="pexpo-topbar" aria-label="Primary navigation">
         <Logo />
-        <div className="pexpo-topbar-search"><Search /></div>
+        <div className="pexpo-desktop-tabs">
+          {TABS.map((tab) => (
+            <button key={tab} className={active === tab ? "is-active" : ""} onClick={() => selectTab(tab)} type="button">
+              {tab}
+            </button>
+          ))}
+        </div>
         <SettingsPanel />
       </nav>
-      <div className="pexpo-desktop-tabs">
-        {TABS.filter((t) => t !== "search").map((tab) => (
-          <button key={tab} className={active === tab ? "is-active" : ""} onClick={() => selectTab(tab)} type="button">{tab}</button>
-        ))}
-      </div>
     </header>
   );
 }
