@@ -1,14 +1,14 @@
 import Link from "next/link";
+import { cleanMusicText } from "@/lib/text";
 
-export default function ArtistCard({ image, name, id }) {
-    return (
-        <Link href={"/search/" + `${encodeURI(name.toLowerCase().split(" ").join("+"))}`}>
-            <div className="overflow-hidden h-[100px] w-[100px] rounded-md">
-                <img src={image} alt={name} className="hover:scale-105 transition cursor-pointer rounded-full h-[100px] min-w-[100px] object-cover"/>
-            </div>
-            <div className="mt-2 text-center">
-                <h1 className="text-sm max-w-[100px] text-ellipsis text-nowrap overflow-hidden">{name.split(" ")[0] || null} {name.split(" ")[1] || null}</h1>
-            </div>
-        </Link>
-    )
+export default function ArtistCard({ image, name }) {
+  const safeName = cleanMusicText(name || "Unknown artist");
+  return (
+    <Link href={`/search/${encodeURIComponent(safeName)}`} className="group w-[100px] shrink-0 text-center">
+      <div className="mx-auto h-[100px] w-[100px] overflow-hidden rounded-full border border-border/60 bg-secondary/50 p-0.5">
+        <img src={image} alt={safeName} loading="lazy" className="h-full w-full rounded-full object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
+      </div>
+      <h2 className="mt-2 truncate text-[12px] font-medium" title={safeName}>{safeName}</h2>
+    </Link>
+  );
 }
