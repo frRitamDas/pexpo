@@ -3,7 +3,6 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
-import MobileMenu from "@/components/mobile-menu";
 import MusicProvider from "@/components/providers/music-provider";
 
 const bricolage_grotesque = Bricolage_Grotesque({
@@ -12,8 +11,8 @@ const bricolage_grotesque = Bricolage_Grotesque({
 });
 
 export const metadata = {
-  title: "Aspect Music - Search The World",
-  description: "Search The World By Using Aspect Music...",
+  title: "PEXPO — Next-gen music experience",
+  description: "Discover music, artists and sounds with PEXPO.",
   icons: "/favi-icon.jpg",
   manifest: "/manifest.json",
 };
@@ -32,19 +31,17 @@ export default function RootLayout({ children }) {
             color="hsl(var(--primary))"
             initialPosition={0.08}
             crawlSpeed={200}
-            height={3}
+            height={2}
             crawl={true}
             showSpinner={false}
-            easing="ease"
-            speed={200}
-            shadow="0 0 10px hsl(var(--primary)),0 0 15px hsl(var(--primary))"
-            template='<div class="bar" role="bar"><div class="peg"></div></div>
-        <div class="spinner" role="spinner"><div class="spinner-icon"></div></div>'
+            easing="ease-out"
+            speed={180}
+            shadow="none"
+            template='<div class="bar" role="bar"><div class="peg"></div></div><div class="spinner" role="spinner"><div class="spinner-icon"></div></div>'
             zIndex={1600}
             showAtBottom={false}
           />
           <MusicProvider>{children}</MusicProvider>
-          {/* <MobileMenu/> */}
           <Toaster position="top-center" visibleToasts={1} />
         </ThemeProvider>
       </body>
