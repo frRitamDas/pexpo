@@ -1,50 +1,23 @@
 import { getSongsById } from "@/lib/fetch";
+import { cleanMusicText } from "@/lib/text";
 import Player from "../_components/Player";
 import Recomandation from "../_components/Recomandation";
-import AdvanceSearch from "../_components/AdvanceSearch";
-import Search from "@/components/page/search";
 
 export const generateMetadata = async ({ params }) => {
-  const title = await getSongsById(params.id);
-  const data = await title.json();
-  console.log(data);
-  const song = data?.data[0];
+  const response = await getSongsById(params.id);
+  const data = await response.json();
+  const song = data?.data?.[0];
+  const title = cleanMusicText(song?.name || "PEXPO");
+  const artist = cleanMusicText(song?.artists?.primary?.[0]?.name || "unknown");
+  const image = song?.image?.[2]?.url || song?.image?.[1]?.url || song?.image?.[0]?.url;
   return {
-    title: song.name,
-    description: `Listen to "${song.name}" by ${data?.artists?.primary[0]?.name || "unknown"} from the album "${song.album?.name}".`,
-    openGraph: {
-      title: song.name,
-      description: `Listen to "${song.name}" by ${data?.artists?.primary[0]?.name || "unknown"}.`,
-      type: "music.song",
-      url: song.url,
-      images: [
-        {
-          url: song.image[2]?.url || song.image[1]?.url || song.image[0]?.url,
-          width: 1200,
-          height: 630,
-          alt: song.name,
-        },
-      ],
-      music: {
-        album: song.album?.url,
-        release_date: song.releaseDate,
-        musician: data?.artists?.primary[0]?.name || "unknown",
-      },
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: song.name,
-      description: `Listen to "${song.name}" by ${data?.artists?.primary[0]?.name || "unknown"}.`,
-      images: song.image?.[0]?.url,
-    },
+    title,
+    description: `Listen to "${title}" by ${artist} on PEXPO.`,
+    openGraph: { title, description: `Listen to "${title}" by ${artist} on PEXPO.`, type: "music.song", url: song?.url, images: image ? [{ url: image, width: 1200, height: 630, alt: title }] : [] },
+    twitter: { card: "summary_large_image", title, description: `Listen to "${title}" by ${artist} on PEXPO.`, images: image ? [image] : [] },
   };
 };
 
 export default function Page({ params }) {
-  return (
-    <div>
-      <Player id={params.id} />
-      <Recomandation id={params.id} />
-    </div>
-  );
+  return <div className="pb-20"><Player id={params.id} /><Recomandation id={params.id} /></div>;
 }
